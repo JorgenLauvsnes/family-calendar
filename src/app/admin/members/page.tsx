@@ -20,6 +20,8 @@ const DAYS = [
   { key: 6, label: 'Lør' },
 ];
 
+const WEEKDAYS = [1, 2, 3, 4, 5];
+
 interface MemberWithDetails extends Member {
   schedules: Schedule[];
   hasGcal: boolean;
@@ -27,7 +29,7 @@ interface MemberWithDetails extends Member {
 
 interface ScheduleForm {
   label: string;
-  day_of_week: number;
+  day_of_week: number | 'weekdays';
   start_time: string;
   end_time: string;
   location: string;
@@ -37,9 +39,53 @@ interface ScheduleForm {
   valid_until: string;
 }
 
+interface ScheduleGroup {
+  isGroup: true;
+  ids: number[];
+  label: string;
+  start_time: string;
+  end_time: string;
+  category: EventCategory;
+  location: string | null;
+  active: boolean;
+}
+
+function groupSchedules(schedules: Schedule[]): Array<Schedule | ScheduleGroup> {
+  const key = (s: Schedule) =>
+    `${s.label}|${s.start_time}|${s.end_time}|${s.category}|${s.location ?? ''}|${s.active}`;
+  const buckets = new Map<string, Schedule[]>();
+  for (const s of schedules) {
+    const k = key(s);
+    if (!buckets.has(k)) buckets.set(k, []);
+    buckets.get(k)!.push(s);
+  }
+  const usedIds = new Set<number>();
+  const result: Array<Schedule | ScheduleGroup> = [];
+  for (const group of buckets.values()) {
+    const days = group.map((s) => s.day_of_week).sort((a, b) => a - b);
+    if (days.length === 5 && days.join() === '1,2,3,4,5') {
+      result.push({
+        isGroup: true,
+        ids: group.map((s) => s.id),
+        label: group[0].label,
+        start_time: group[0].start_time,
+        end_time: group[0].end_time,
+        category: group[0].category as EventCategory,
+        location: group[0].location,
+        active: Boolean(group[0].active),
+      });
+      group.forEach((s) => usedIds.add(s.id));
+    }
+  }
+  for (const s of schedules) {
+    if (!usedIds.has(s.id)) result.push(s);
+  }
+  return result;
+}
+
 const emptyScheduleForm = (): ScheduleForm => ({
   label: '',
-  day_of_week: 1,
+  day_of_week: 'weekdays',
   start_time: '08:00',
   end_time: '16:00',
   location: '',
@@ -114,16 +160,21 @@ export default function MembersPage() {
     if (!editing) return;
     setSaving(true);
     try {
-      const res = await fetch('/api/schedules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ member_id: editing.id, ...scheduleForm }),
-      });
-      if (res.ok) {
+      const days =
+        scheduleForm.day_of_week === 'weekdays' ? WEEKDAYS : [scheduleForm.day_of_week];
+      const results = await Promise.all(
+        days.map((day) =>
+          fetch('/api/schedules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ member_id: editing.id, ...scheduleForm, day_of_week: day }),
+          })
+        )
+      );
+      if (results.every((r) => r.ok)) {
         setMessage('Timeplan lagt til!');
         setAddingSchedule(false);
         setScheduleForm(emptyScheduleForm());
-        // Refresh editing member details
         const r = await fetch(`/api/members/${editing.id}`);
         setEditing(await r.json());
         await load();
@@ -135,9 +186,14 @@ export default function MembersPage() {
     }
   };
 
-  const deleteSchedule = async (scheduleId: number) => {
-    if (!confirm('Slette denne timeplanen?')) return;
-    await fetch(`/api/schedules/${scheduleId}`, { method: 'DELETE' });
+  const deleteSchedule = async (ids: number | number[]) => {
+    const multiple = Array.isArray(ids) && ids.length > 1;
+    if (!confirm(multiple ? 'Slette alle hverdagene?' : 'Slette denne timeplanen?')) return;
+    await Promise.all(
+      (Array.isArray(ids) ? ids : [ids]).map((id) =>
+        fetch(`/api/schedules/${id}`, { method: 'DELETE' })
+      )
+    );
     if (editing) {
       const r = await fetch(`/api/members/${editing.id}`);
       setEditing(await r.json());
@@ -325,30 +381,37 @@ export default function MembersPage() {
 
                   {/* Existing schedules */}
                   <div className="space-y-2">
-                    {editing.schedules.map((s) => (
-                      <div
-                        key={s.id}
-                        className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
-                      >
-                        <div className="flex items-center gap-2">
-                          <CategoryIcon category={s.category} size={14} className="text-gray-500" />
-                          <span className="font-medium">{s.label}</span>
-                          <span className="text-gray-500">
-                            {DAYS.find((d) => d.key === s.day_of_week)?.label}
-                            {' '}{s.start_time}–{s.end_time}
-                          </span>
-                          {!s.active && (
-                            <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Pause</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => deleteSchedule(s.id)}
-                          className="text-red-400 hover:text-red-600 text-xs"
+                    {groupSchedules(editing.schedules).map((entry, i) => {
+                      const isGroup = 'isGroup' in entry;
+                      const dayLabel = isGroup
+                        ? 'Man–Fre'
+                        : DAYS.find((d) => d.key === (entry as Schedule).day_of_week)?.label;
+                      return (
+                        <div
+                          key={isGroup ? `group-${i}` : (entry as Schedule).id}
+                          className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm"
                         >
-                          Slett
-                        </button>
-                      </div>
-                    ))}
+                          <div className="flex items-center gap-2">
+                            <CategoryIcon category={entry.category} size={14} className="text-gray-500" />
+                            <span className="font-medium">{entry.label}</span>
+                            <span className="text-gray-500">
+                              {dayLabel} {entry.start_time}–{entry.end_time}
+                            </span>
+                            {!entry.active && (
+                              <span className="text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Pause</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={() =>
+                              deleteSchedule(isGroup ? (entry as ScheduleGroup).ids : (entry as Schedule).id)
+                            }
+                            className="text-red-400 hover:text-red-600 text-xs"
+                          >
+                            Slett
+                          </button>
+                        </div>
+                      );
+                    })}
                     {editing.schedules.length === 0 && (
                       <p className="text-sm text-gray-400">Ingen timeplan ennå</p>
                     )}
@@ -385,9 +448,16 @@ export default function MembersPage() {
                           <label className="text-xs text-gray-600 block mb-0.5">Ukedag</label>
                           <select
                             value={scheduleForm.day_of_week}
-                            onChange={(e) => setScheduleForm({ ...scheduleForm, day_of_week: Number(e.target.value) })}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setScheduleForm({
+                                ...scheduleForm,
+                                day_of_week: val === 'weekdays' ? 'weekdays' : Number(val),
+                              });
+                            }}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500"
                           >
+                            <option value="weekdays">Hverdager (Man–Fre)</option>
                             {DAYS.map((d) => (
                               <option key={d.key} value={d.key}>{d.label}</option>
                             ))}
