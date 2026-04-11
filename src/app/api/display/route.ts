@@ -42,39 +42,63 @@ export async function GET() {
       settings[key] = value;
     }
 
-    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Oslo' }); // YYYY-MM-DD
-    const vacationMode =
-      (settings['vacation_start'] && settings['vacation_end'])
-        ? today >= settings['vacation_start'] && today <= settings['vacation_end']
-        : settings['vacation_mode'] === '1';
-    const lat = vacationMode
-      ? settings['vacation_lat'] || settings['weather_lat']
-      : settings['weather_lat'];
-    const lon = vacationMode
-      ? settings['vacation_lon'] || settings['weather_lon']
-      : settings['weather_lon'];
-    const locationName = vacationMode
-      ? settings['vacation_location'] || settings['weather_location']
-      : settings['weather_location'];
+    // ── Weather location logic ──────────────────────────────────────
+    const todayStr = new Date().toLocaleDateString('sv-SE', { timeZone: TIMEZONE }); // YYYY-MM-DD
 
-    // Load members
+    const vacStart = settings['vacation_start'];
+    const vacEnd   = settings['vacation_end'];
+
+    // Is today itself a vacation day? (drives header weather + FERIE badge)
+    const vacationToday =
+      vacStart && vacEnd
+        ? todayStr >= vacStart && todayStr <= vacEnd
+        : settings['vacation_mode'] === '1';
+
+    const homeLat      = settings['weather_lat'];
+    const homeLon      = settings['weather_lon'];
+    const homeLocation = settings['weather_location'];
+    const vacLat       = settings['vacation_lat'] || homeLat;
+    const vacLon       = settings['vacation_lon'] || homeLon;
+    const vacLocation  = settings['vacation_location'] || homeLocation;
+
+    // Only fetch vacation weather when there are coordinates and a period defined
+    const hasVacationSetup = !!(
+      settings['vacation_lat'] &&
+      settings['vacation_lon'] &&
+      (vacStart || settings['vacation_mode'] === '1')
+    );
+
+    // Fetch both locations in parallel to avoid sequential waiting
+    const [homeWeather, vacWeather] = await Promise.all([
+      homeLat && homeLon
+        ? fetchWeather(homeLat, homeLon, homeLocation)
+        : Promise.resolve(null),
+      hasVacationSetup
+        ? fetchWeather(vacLat, vacLon, vacLocation)
+        : Promise.resolve(null),
+    ]);
+
+    // Header weather reflects today's location
+    const headerWeather = vacationToday ? (vacWeather ?? homeWeather) : homeWeather;
+
+    // ── Members ─────────────────────────────────────────────────────
     const members = db
-      .prepare(
-        'SELECT id, name, color, avatar_initials FROM members ORDER BY id'
-      )
+      .prepare('SELECT id, name, color, avatar_initials FROM members ORDER BY id')
       .all() as { id: number; name: string; color: string; avatar_initials: string | null }[];
 
-    // Build 7-day window
-    const today = startOfDay(new Date());
+    // ── 7-day window ─────────────────────────────────────────────────
+    const todayDate = startOfDay(new Date());
+    const memberMap = new Map(members.map((m) => [m.id, m]));
     const days: DisplayDay[] = [];
 
     for (let i = 0; i < 7; i++) {
-      const day = addDays(today, i);
-      const dateStr = formatInTimeZone(day, TIMEZONE, 'yyyy-MM-dd');
+      const day = addDays(todayDate, i);
+      const dateStr  = formatInTimeZone(day, TIMEZONE, 'yyyy-MM-dd');
       const startIso = formatInTimeZone(day, TIMEZONE, "yyyy-MM-dd'T'00:00:00xxx");
-      const endDay = addDays(day, 1);
-      const endIso = formatInTimeZone(endDay, TIMEZONE, "yyyy-MM-dd'T'00:00:00xxx");
+      const endDay   = addDays(day, 1);
+      const endIso   = formatInTimeZone(endDay, TIMEZONE, "yyyy-MM-dd'T'00:00:00xxx");
 
+      // Fetch events for this day
       const rows = db
         .prepare(
           `SELECT
@@ -89,19 +113,17 @@ export async function GET() {
            ORDER BY e.all_day DESC, e.start_datetime ASC`
         )
         .all(startIso, endIso) as Array<{
-        id: number;
-        title: string;
-        description: string | null;
-        category: string;
-        start_datetime: string;
-        end_datetime: string;
-        all_day: number;
-        location: string | null;
-        source: string;
-        member_ids_str: string | null;
-      }>;
-
-      const memberMap = new Map(members.map((m) => [m.id, m]));
+          id: number;
+          title: string;
+          description: string | null;
+          category: string;
+          start_datetime: string;
+          end_datetime: string;
+          all_day: number;
+          location: string | null;
+          source: string;
+          member_ids_str: string | null;
+        }>;
 
       const events: DisplayEvent[] = rows.map((row) => {
         const memberIds = row.member_ids_str
@@ -127,21 +149,26 @@ export async function GET() {
         };
       });
 
-      days.push({ date: dateStr, events });
-    }
+      // Per-day forecast: pick vacation or home weather based on whether this
+      // specific date falls within the vacation period
+      const isDayVacation =
+        vacStart && vacEnd
+          ? dateStr >= vacStart && dateStr <= vacEnd
+          : vacationToday; // fallback: if no dates, mirror today's status
 
-    // Fetch weather (non-blocking — returns null on error)
-    const weather = lat && lon
-      ? await fetchWeather(lat, lon, locationName)
-      : null;
+      const dayWeatherSource = isDayVacation ? (vacWeather ?? homeWeather) : homeWeather;
+      const forecast = dayWeatherSource?.daily.find((f) => f.date === dateStr);
+
+      days.push({ date: dateStr, events, forecast });
+    }
 
     const payload: DisplayPayload = {
       familyName: settings['family_name'] || 'Familien',
       generatedAt: new Date().toISOString(),
       members,
       days,
-      weather,
-      vacationMode,
+      weather: headerWeather,
+      vacationMode: vacationToday,
     };
 
     return NextResponse.json(payload);

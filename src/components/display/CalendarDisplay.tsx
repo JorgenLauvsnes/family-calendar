@@ -186,17 +186,14 @@ export default function CalendarDisplay({ initial }: Props) {
 
       {/* ── CALENDAR GRID ───────────────────────────────────── */}
       <div className="relative z-10 flex flex-1 overflow-hidden">
-        {data.days.map((day, i) => {
-          const forecast = data.weather?.daily.find((f) => f.date === day.date);
-          return (
-            <DayColumn
-              key={day.date}
-              day={day}
-              forecast={forecast}
-              isToday={i === 0}
-            />
-          );
-        })}
+        {data.days.map((day, i) => (
+          <DayColumn
+            key={day.date}
+            day={day}
+            forecast={day.forecast}
+            isToday={i === 0}
+          />
+        ))}
       </div>
 
       {/* ── FOOTER — person legend ───────────────────────────── */}

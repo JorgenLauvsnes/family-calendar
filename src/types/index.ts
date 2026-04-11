@@ -119,6 +119,7 @@ export interface WeatherData {
 export interface DisplayDay {
   date: string; // 'YYYY-MM-DD'
   events: DisplayEvent[];
+  forecast?: DailyForecast; // pre-resolved per-day forecast (correct location)
 }
 
 export interface DisplayEvent {
