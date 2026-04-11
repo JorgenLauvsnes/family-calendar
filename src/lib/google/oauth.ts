@@ -53,6 +53,7 @@ export function buildAuthUrl(memberId: number, state: string): string {
     scope: [
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/userinfo.email',
+      'openid'
     ],
     state: `${memberId}:${state}`,
     prompt: 'consent',
