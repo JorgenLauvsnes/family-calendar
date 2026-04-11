@@ -91,12 +91,37 @@ function createAndMigrateDb(): Database.Database {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
-    CREATE INDEX IF NOT EXISTS idx_events_start    ON events(start_datetime);
-    CREATE INDEX IF NOT EXISTS idx_events_source   ON events(source);
-    CREATE INDEX IF NOT EXISTS idx_events_gcal_id  ON events(gcal_event_id);
-    CREATE INDEX IF NOT EXISTS idx_em_member       ON event_members(member_id);
-    CREATE INDEX IF NOT EXISTS idx_sched_member    ON schedules(member_id);
-    CREATE INDEX IF NOT EXISTS idx_sched_dow       ON schedules(day_of_week);
+    CREATE INDEX IF NOT EXISTS idx_events_start  ON events(start_datetime);
+    CREATE INDEX IF NOT EXISTS idx_events_source ON events(source);
+    CREATE INDEX IF NOT EXISTS idx_em_member     ON event_members(member_id);
+    CREATE INDEX IF NOT EXISTS idx_sched_member  ON schedules(member_id);
+    CREATE INDEX IF NOT EXISTS idx_sched_dow     ON schedules(day_of_week);
+  `);
+
+  // Migration: ensure gcal_event_id is unique across all rows.
+  // Step 1 — deduplicate: for any gcal_event_id that appears more than once,
+  //   keep only the row with the highest id (most recently inserted/updated).
+  db.exec(`
+    DELETE FROM events
+    WHERE gcal_event_id IS NOT NULL
+      AND id NOT IN (
+        SELECT MAX(id)
+        FROM events
+        WHERE gcal_event_id IS NOT NULL
+        GROUP BY gcal_event_id
+      )
+  `);
+
+  // Step 2 — drop the old non-unique index if it exists (replaced below).
+  db.exec('DROP INDEX IF EXISTS idx_events_gcal_id');
+
+  // Step 3 — create the unique partial index.
+  //   Partial (WHERE NOT NULL) so multiple manual/generated events with
+  //   gcal_event_id = NULL do not conflict.
+  db.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_events_gcal_unique
+    ON events(gcal_event_id)
+    WHERE gcal_event_id IS NOT NULL
   `);
 
   // Seed default settings

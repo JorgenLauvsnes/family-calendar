@@ -194,15 +194,6 @@ async function doSync(memberId: number): Promise<void> {
     }
   }
 
-  // Ensure unique constraint on gcal_event_id
-  try {
-    db.exec(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_events_gcal_unique ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL'
-    );
-  } catch {
-    // Index already exists
-  }
-
   const upsertEvent = db.prepare(`
     INSERT INTO events
       (title, description, category, start_datetime, end_datetime, all_day, location, source, gcal_event_id, updated_at)
