@@ -109,6 +109,8 @@ function createAndMigrateDb(): Database.Database {
     ['weather_lon', '10.5167'],
     ['weather_location', 'Ranheim, Trondheim'],
     ['vacation_mode', '0'],
+    ['vacation_start', ''],
+    ['vacation_end', ''],
     ['vacation_lat', ''],
     ['vacation_lon', ''],
     ['vacation_location', ''],

@@ -8,7 +8,8 @@ interface MemberWithGcal extends Member {
 }
 
 export default function GoogleCalendarPage() {
-  const [members, setMembers] = useState<MemberWithGcal[]>([]);
+  const [adults, setAdults] = useState<MemberWithGcal[]>([]);
+  const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [syncing, setSyncing] = useState<number | 'all' | null>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -29,14 +30,18 @@ export default function GoogleCalendarPage() {
   const load = async () => {
     const res = await fetch('/api/members');
     const list: Member[] = await res.json();
+    setAllMembers(list);
+
     const detailed = await Promise.all(
-      list.map(async (m) => {
-        const r = await fetch(`/api/members/${m.id}`);
-        const data = await r.json();
-        return { ...m, hasGcal: data.hasGcal } as MemberWithGcal;
-      })
+      list
+        .filter((m) => m.role === 'adult')
+        .map(async (m) => {
+          const r = await fetch(`/api/members/${m.id}`);
+          const data = await r.json();
+          return { ...m, hasGcal: data.hasGcal } as MemberWithGcal;
+        })
     );
-    setMembers(detailed.filter((m) => m.role === 'adult'));
+    setAdults(detailed);
   };
 
   useEffect(() => { load(); }, []);
@@ -98,7 +103,12 @@ export default function GoogleCalendarPage() {
     }
   };
 
-  const hasAnyGcal = members.some((m) => m.hasGcal);
+  const hasAnyGcal = adults.some((m) => m.hasGcal);
+
+  // Build hashtag for a member name (first name, lowercased)
+  const memberTag = (name: string) =>
+    '#' + name.split(' ')[0].toLowerCase()
+      .replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/å/g, 'a');
 
   return (
     <div>
@@ -126,6 +136,49 @@ export default function GoogleCalendarPage() {
         </div>
       )}
 
+      {/* Tagging guide */}
+      <section className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-5">
+        <h2 className="font-semibold text-blue-900 text-base mb-2">🏷️ Slik tagger du hendelser i Google Kalender</h2>
+        <p className="text-sm text-blue-800 mb-3">
+          Legg til en av disse hashtaggene i tittelen eller beskrivelsen på en hendelse i Google Kalender
+          for at den skal vises i familiekalenderen. Bare taggede hendelser hentes inn.
+        </p>
+
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {/* Special tags */}
+          <div className="bg-white rounded-lg border border-blue-200 px-4 py-3">
+            <div className="font-mono text-sm font-bold text-blue-700 mb-1">#familie&nbsp; / &nbsp;#alle</div>
+            <div className="text-xs text-gray-600">Vises for alle familiemedlemmer</div>
+          </div>
+
+          {/* Per-member tags */}
+          {allMembers.map((m) => (
+            <div
+              key={m.id}
+              className="bg-white rounded-lg border border-blue-200 px-4 py-3 flex items-center gap-3"
+            >
+              <span
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                style={{ backgroundColor: m.color }}
+              >
+                {m.avatar_initials ?? m.name[0]}
+              </span>
+              <div>
+                <div className="font-mono text-sm font-bold text-blue-700">{memberTag(m.name)}</div>
+                <div className="text-xs text-gray-600">Vises kun for {m.name.split(' ')[0]}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-lg border border-blue-100 px-4 py-3 text-sm text-gray-700">
+          <span className="font-semibold">Eksempel:</span>{' '}
+          Skriv{' '}
+          <span className="font-mono bg-blue-50 px-1.5 py-0.5 rounded text-blue-700">Fotballkamp {allMembers[0] ? memberTag(allMembers[0].name) : '#markus'}</span>
+          {' '}eller legg taggen i beskrivelsen. Du kan bruke flere tagger på én hendelse.
+        </div>
+      </section>
+
       {/* Setup instructions */}
       {!process.env.NEXT_PUBLIC_GOOGLE_CONFIGURED && (
         <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
@@ -145,7 +198,7 @@ export default function GoogleCalendarPage() {
       )}
 
       <div className="grid gap-4">
-        {members.map((member) => (
+        {adults.map((member) => (
           <div
             key={member.id}
             className="bg-white rounded-xl border border-gray-200 shadow-sm p-5"
@@ -211,15 +264,15 @@ export default function GoogleCalendarPage() {
 
             {member.hasGcal && (
               <div className="mt-3 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
-                Hendelser fra Google Kalender synkroniseres automatisk hvert 30. minutt.
-                Du kan også trykke &quot;Synkroniser&quot; for umiddelbar oppdatering.
+                Hendelser synkroniseres automatisk hvert 30. minutt. Husk å tagge hendelsene dine med
+                {' '}<span className="font-mono text-blue-600">#familie</span> eller et medlemsnavn for at de skal vises.
               </div>
             )}
           </div>
         ))}
       </div>
 
-      {members.length === 0 && (
+      {adults.length === 0 && (
         <div className="text-gray-400 text-center py-8">
           Ingen voksne familiemedlemmer funnet.
           Gå til <a href="/admin/members" className="text-blue-600 underline">Familiemedlemmer</a> for å legge til.

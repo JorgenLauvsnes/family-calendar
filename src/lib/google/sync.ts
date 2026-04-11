@@ -53,30 +53,65 @@ async function getAuthedClient(memberId: number) {
 
 function detectCategory(title: string, desc: string): EventCategory {
   const text = `${title} ${desc}`.toLowerCase();
-  if (/\b(jobb|work|kontor|office|møte|meeting|arbeid)\b/.test(text))
-    return 'work';
-  if (/\b(skole|school|klasse|sfo|undervisning)\b/.test(text))
-    return 'school';
+  if (/\b(jobb|work|kontor|office|møte|meeting|arbeid)\b/.test(text)) return 'work';
+  if (/\b(skole|school|klasse|sfo|undervisning)\b/.test(text)) return 'school';
   if (/\b(bhg|barnehage|kindergarten)\b/.test(text)) return 'kindergarten';
-  if (
-    /\b(trening|workout|gym|løping|running|fotball|håndball|svøm|sykkel|idrett)\b/.test(
-      text
-    )
-  )
-    return 'workout';
-  if (/\b(musikk|music|piano|gitar|sang|kor|konsert|korps)\b/.test(text))
-    return 'music';
-  if (/\b(fest|party|selskap|bursdag|julebord|feiring)\b/.test(text))
-    return 'party';
-  if (/\b(overnatting|sleepover|pyjamas|besøk.*natt)\b/.test(text))
-    return 'sleepover';
-  if (/\b(lege|tann|doktor|sykehus|helsesjøke|vaksin)\b/.test(text))
-    return 'doctor';
+  if (/\b(trening|workout|gym|løping|running|fotball|håndball|svøm|sykkel|idrett)\b/.test(text)) return 'workout';
+  if (/\b(musikk|music|piano|gitar|sang|kor|konsert|korps)\b/.test(text)) return 'music';
+  if (/\b(fest|party|selskap|julebord|feiring)\b/.test(text)) return 'party';
+  if (/\b(overnatting|sleepover|pyjamas|besøk.*natt)\b/.test(text)) return 'sleepover';
+  if (/\b(lege|tann|doktor|sykehus|helsesjøke|vaksin)\b/.test(text)) return 'doctor';
   if (/\b(bursdag|birthday|fyller)\b/.test(text)) return 'birthday';
-  if (/\b(ferie|vacation|reise|tur|fly|hotell)\b/.test(text))
-    return 'vacation';
+  if (/\b(ferie|vacation|reise|tur|fly|hotell)\b/.test(text)) return 'vacation';
   if (/\b(sport|turnering|kamp|løp|stevne)\b/.test(text)) return 'sports';
   return 'other';
+}
+
+/** Normalize a string for tag matching: lowercase + map Norwegian chars to ASCII */
+function normalizeTag(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/ø/g, 'o')
+    .replace(/æ/g, 'ae')
+    .replace(/å/g, 'a')
+    .replace(/\s+/g, '');
+}
+
+/** Extract hashtag values from text, returning lowercase tag names (without #) */
+function extractTags(text: string): string[] {
+  // Match # followed by word chars and Unicode letters (handles Norwegian etc.)
+  const matches = text.match(/#([\w\u00C0-\u024F]+)/gi) ?? [];
+  return matches.map((t) => t.slice(1).toLowerCase());
+}
+
+/** Return member IDs this event should be linked to, based on hashtags in the text */
+export function resolveTargetMembers(
+  tags: string[],
+  allMembers: { id: number; name: string }[]
+): number[] {
+  const ids = new Set<number>();
+
+  for (const tag of tags) {
+    // #familie or #alle → all family members
+    if (tag === 'familie' || tag === 'alle') {
+      return allMembers.map((m) => m.id);
+    }
+
+    // Match against each member's first name and full name
+    for (const member of allMembers) {
+      const firstName = member.name.split(' ')[0];
+      if (
+        firstName.toLowerCase() === tag ||
+        member.name.toLowerCase() === tag ||
+        normalizeTag(firstName) === normalizeTag(tag) ||
+        normalizeTag(member.name) === normalizeTag(tag)
+      ) {
+        ids.add(member.id);
+      }
+    }
+  }
+
+  return [...ids];
 }
 
 export async function syncMemberCalendar(memberId: number): Promise<void> {
@@ -127,7 +162,23 @@ async function doSync(memberId: number): Promise<void> {
     pageToken = res.data.nextPageToken ?? undefined;
   } while (pageToken);
 
-  // Delete existing Google events for this member in the range
+  // Load all family members for tag resolution (tags can route to any member)
+  const allMembers = db
+    .prepare('SELECT id, name FROM members')
+    .all() as { id: number; name: string }[];
+
+  // Pre-filter: only events with recognized family hashtags get imported
+  const taggedItems = allItems.filter((item) => {
+    if (!item.summary || item.status === 'cancelled') return false;
+    const tags = extractTags(`${item.summary} ${item.description ?? ''}`);
+    return resolveTargetMembers(tags, allMembers).length > 0;
+  });
+
+  const incomingIds = new Set(
+    taggedItems.map((item) => item.id).filter(Boolean)
+  );
+
+  // Get existing Google-sourced events for this member
   const existingGcalIds = db
     .prepare(
       `SELECT DISTINCT e.id, e.gcal_event_id FROM events e
@@ -136,21 +187,22 @@ async function doSync(memberId: number): Promise<void> {
     )
     .all(memberId) as { id: number; gcal_event_id: string }[];
 
-  const incomingIds = new Set(
-    allItems
-      .filter((item: GcalEvent) => item.status !== 'cancelled')
-      .map((item: GcalEvent) => item.id)
-      .filter(Boolean)
-  );
-
-  // Remove events no longer present in Google Calendar
+  // Remove events that are no longer in Google Calendar or no longer tagged
   for (const row of existingGcalIds) {
     if (!incomingIds.has(row.gcal_event_id)) {
       db.prepare('DELETE FROM events WHERE id = ?').run(row.id);
     }
   }
 
-  // Upsert incoming events
+  // Ensure unique constraint on gcal_event_id
+  try {
+    db.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_events_gcal_unique ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL'
+    );
+  } catch {
+    // Index already exists
+  }
+
   const upsertEvent = db.prepare(`
     INSERT INTO events
       (title, description, category, start_datetime, end_datetime, all_day, location, source, gcal_event_id, updated_at)
@@ -166,61 +218,51 @@ async function doSync(memberId: number): Promise<void> {
       updated_at = datetime('now')
   `);
 
-  // Need a unique constraint on gcal_event_id for ON CONFLICT — handled below
   const insertMember = db.prepare(
     'INSERT OR IGNORE INTO event_members (event_id, member_id) VALUES (?, ?)'
   );
 
-  // Ensure unique constraint exists
-  try {
-    db.exec(
-      'CREATE UNIQUE INDEX IF NOT EXISTS idx_events_gcal_unique ON events(gcal_event_id) WHERE gcal_event_id IS NOT NULL'
-    );
-  } catch {
-    // Index may already exist
-  }
-
-  for (const item of allItems) {
-    if (!item.summary || item.status === 'cancelled') continue;
+  for (const item of taggedItems) {
+    if (!item.summary) continue;
 
     const startRaw = item.start?.dateTime || item.start?.date;
     const endRaw = item.end?.dateTime || item.end?.date;
     if (!startRaw || !endRaw) continue;
 
     const isAllDay = !!item.start?.date && !item.start?.dateTime;
-
-    // Normalise all-day to midnight ISO
     const startDt = isAllDay ? `${startRaw}T00:00:00` : startRaw;
     const endDt = isAllDay ? `${endRaw}T00:00:00` : endRaw;
 
-    const category = detectCategory(
-      item.summary,
-      item.description || ''
-    );
+    const category = detectCategory(item.summary, item.description ?? '');
 
     upsertEvent.run(
       item.summary,
-      item.description || null,
+      item.description ?? null,
       category,
       startDt,
       endDt,
       isAllDay ? 1 : 0,
-      item.location || null,
+      item.location ?? null,
       item.id
     );
 
     const eventRow = db
-      .prepare(
-        'SELECT id FROM events WHERE gcal_event_id = ?'
-      )
+      .prepare('SELECT id FROM events WHERE gcal_event_id = ?')
       .get(item.id) as { id: number } | undefined;
 
     if (eventRow) {
-      insertMember.run(eventRow.id, memberId);
+      // Replace member links with the set resolved from current tags
+      const tags = extractTags(`${item.summary} ${item.description ?? ''}`);
+      const targetMemberIds = resolveTargetMembers(tags, allMembers);
+
+      db.prepare('DELETE FROM event_members WHERE event_id = ?').run(eventRow.id);
+      for (const tid of targetMemberIds) {
+        insertMember.run(eventRow.id, tid);
+      }
     }
   }
 
-  // Update sync timestamp on member row
+  // Update sync timestamp
   db.prepare(
     "UPDATE members SET updated_at = datetime('now') WHERE id = ?"
   ).run(memberId);

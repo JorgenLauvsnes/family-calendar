@@ -42,7 +42,11 @@ export async function GET() {
       settings[key] = value;
     }
 
-    const vacationMode = settings['vacation_mode'] === '1';
+    const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Oslo' }); // YYYY-MM-DD
+    const vacationMode =
+      (settings['vacation_start'] && settings['vacation_end'])
+        ? today >= settings['vacation_start'] && today <= settings['vacation_end']
+        : settings['vacation_mode'] === '1';
     const lat = vacationMode
       ? settings['vacation_lat'] || settings['weather_lat']
       : settings['weather_lat'];

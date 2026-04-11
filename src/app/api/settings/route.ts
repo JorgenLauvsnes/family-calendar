@@ -53,7 +53,8 @@ export async function PUT(request: NextRequest) {
       // Only update known keys
       const knownKeys = [
         'family_name', 'weather_lat', 'weather_lon', 'weather_location',
-        'vacation_mode', 'vacation_lat', 'vacation_lon', 'vacation_location',
+        'vacation_mode', 'vacation_start', 'vacation_end',
+        'vacation_lat', 'vacation_lon', 'vacation_location',
         'display_wake_lock', 'google_sync_interval_minutes',
       ];
       if (knownKeys.includes(key)) {

@@ -8,14 +8,18 @@ export async function GET() {
   const db = getDb();
   const settingsRows = db
     .prepare(
-      "SELECT key, value FROM settings WHERE key IN ('weather_lat','weather_lon','weather_location','vacation_mode','vacation_lat','vacation_lon','vacation_location')"
+      "SELECT key, value FROM settings WHERE key IN ('weather_lat','weather_lon','weather_location','vacation_mode','vacation_start','vacation_end','vacation_lat','vacation_lon','vacation_location')"
     )
     .all() as { key: string; value: string }[];
 
   const s: Record<string, string> = {};
   for (const { key, value } of settingsRows) s[key] = value;
 
-  const vacation = s['vacation_mode'] === '1';
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Oslo' }); // YYYY-MM-DD
+  const vacation =
+    (s['vacation_start'] && s['vacation_end'])
+      ? today >= s['vacation_start'] && today <= s['vacation_end']
+      : s['vacation_mode'] === '1';
   const lat = vacation
     ? s['vacation_lat'] || s['weather_lat']
     : s['weather_lat'];

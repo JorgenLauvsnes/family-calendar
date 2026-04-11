@@ -24,53 +24,57 @@ export default function EventCard({ event, compact = false }: Props) {
 
   return (
     <div
-      className={`rounded-lg border-l-4 overflow-hidden ${
-        compact ? 'p-1.5' : 'p-2.5'
-      }`}
+      className={`rounded-lg border-l-[3px] overflow-hidden ${compact ? 'p-1.5' : 'p-2.5'}`}
       style={{
         borderLeftColor: primaryColor,
-        backgroundColor: `${primaryColor}22`,
+        background: `linear-gradient(135deg, ${primaryColor}28 0%, ${primaryColor}10 100%)`,
+        boxShadow: `0 1px 3px rgba(0,0,0,0.3), inset 0 0 0 1px ${primaryColor}18`,
       }}
     >
-      {/* Time row */}
+      {/* Time + category row */}
       <div
-        className={`flex items-center gap-1.5 ${
-          compact ? 'text-xs' : 'text-sm'
-        } text-slate-400 mb-0.5`}
+        className={`flex items-center gap-1.5 mb-0.5 ${compact ? 'text-[10px]' : 'text-xs'}`}
+        style={{ color: 'rgba(148,163,184,0.7)' }}
       >
         <CategoryIcon
           category={event.category}
-          size={compact ? 11 : 13}
-          className="flex-shrink-0 text-slate-400"
+          size={compact ? 10 : 12}
+          className="flex-shrink-0"
+          style={{ color: `${primaryColor}bb` }}
         />
-        <span className="font-mono">{timeLabel}</span>
+        <span className="font-mono tracking-tight">{timeLabel}</span>
       </div>
 
       {/* Title */}
       <div
-        className={`font-semibold leading-tight text-slate-100 truncate ${
-          compact ? 'text-xs' : 'text-sm'
-        }`}
+        className={`font-semibold leading-tight truncate ${compact ? 'text-[11px]' : 'text-sm'}`}
+        style={{ color: 'rgba(241,245,249,0.95)' }}
         title={event.title}
       >
         {event.title}
       </div>
 
-      {/* Description — only in full view */}
+      {/* Description — full view only */}
       {!compact && event.description && (
-        <div className="text-xs text-slate-400 truncate mt-0.5">
+        <div
+          className="text-xs truncate mt-0.5"
+          style={{ color: 'rgba(148,163,184,0.6)' }}
+        >
           {event.description}
         </div>
       )}
 
-      {/* Location — only in full view */}
+      {/* Location — full view only */}
       {!compact && event.location && (
-        <div className="text-xs text-slate-500 truncate mt-0.5">
+        <div
+          className="text-xs truncate mt-0.5"
+          style={{ color: 'rgba(100,116,139,0.7)' }}
+        >
           📍 {event.location}
         </div>
       )}
 
-      {/* Person badges */}
+      {/* Member avatar dots */}
       {event.member_names.length > 0 && (
         <div className="flex gap-1 mt-1.5 flex-wrap">
           {event.member_colors.map((color, i) => {
@@ -85,9 +89,12 @@ export default function EventCard({ event, compact = false }: Props) {
               <span
                 key={event.member_ids[i]}
                 className={`rounded-full flex items-center justify-center font-bold text-white flex-shrink-0 ${
-                  compact ? 'w-4 h-4 text-[9px]' : 'w-6 h-6 text-[11px]'
+                  compact ? 'w-4 h-4 text-[8px]' : 'w-5 h-5 text-[10px]'
                 }`}
-                style={{ backgroundColor: color }}
+                style={{
+                  backgroundColor: color,
+                  boxShadow: `0 0 0 1px rgba(0,0,0,0.3), 0 0 4px ${color}55`,
+                }}
                 title={name}
               >
                 {initials}

@@ -10,16 +10,39 @@ body {
 /* Thin scrollbar for day event lists */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #334155 transparent;
+  scrollbar-color: rgba(51,65,85,0.6) transparent;
 }
 *::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
 }
 *::-webkit-scrollbar-thumb {
-  background-color: #334155;
+  background-color: rgba(51,65,85,0.6);
   border-radius: 2px;
 }
+
+/* ── Floating background blob animations ────────────────── */
+@keyframes blobDrift1 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  30%       { transform: translate(30px, -20px) scale(1.04); }
+  60%       { transform: translate(-15px, 15px) scale(0.97); }
+}
+
+@keyframes blobDrift2 {
+  0%, 100% { transform: translate(0px, 0px) scale(1); }
+  35%       { transform: translate(-25px, 20px) scale(1.06); }
+  70%       { transform: translate(20px, -10px) scale(0.96); }
+}
+
+@keyframes blobDrift3 {
+  0%, 100% { transform: translate(-50%, 0px) scale(1); }
+  40%       { transform: translate(calc(-50% + 20px), -15px) scale(1.03); }
+  75%       { transform: translate(calc(-50% - 10px), 10px) scale(0.98); }
+}
+
+.blob-1 { animation: blobDrift1 22s ease-in-out infinite; }
+.blob-2 { animation: blobDrift2 28s ease-in-out infinite; }
+.blob-3 { animation: blobDrift3 18s ease-in-out infinite; }

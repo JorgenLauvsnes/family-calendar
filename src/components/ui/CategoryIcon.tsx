@@ -1,3 +1,4 @@
+import React from 'react';
 import {
   Briefcase,
   BookOpen,
@@ -34,9 +35,10 @@ interface Props {
   category: EventCategory | string;
   size?: number;
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export default function CategoryIcon({ category, size = 14, className }: Props) {
+export default function CategoryIcon({ category, size = 14, className, style }: Props) {
   const Icon: LucideIcon = ICONS[category as EventCategory] ?? CalendarDays;
-  return <Icon size={size} className={className} />;
+  return <Icon size={size} className={className} style={style} />;
 }

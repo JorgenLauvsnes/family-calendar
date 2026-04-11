@@ -83,6 +83,8 @@ export interface Settings {
   weather_lon: string;
   weather_location: string;
   vacation_mode: string;   // '0' or '1'
+  vacation_start: string;  // 'YYYY-MM-DD'
+  vacation_end: string;    // 'YYYY-MM-DD'
   vacation_lat: string;
   vacation_lon: string;
   vacation_location: string;

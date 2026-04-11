@@ -7,7 +7,8 @@ interface SettingsForm {
   weather_lat: string;
   weather_lon: string;
   weather_location: string;
-  vacation_mode: string;
+  vacation_start: string;
+  vacation_end: string;
   vacation_lat: string;
   vacation_lon: string;
   vacation_location: string;
@@ -21,7 +22,8 @@ export default function SettingsPage() {
     weather_lat: '',
     weather_lon: '',
     weather_location: '',
-    vacation_mode: '0',
+    vacation_start: '',
+    vacation_end: '',
     vacation_lat: '',
     vacation_lon: '',
     vacation_location: '',
@@ -55,7 +57,8 @@ export default function SettingsPage() {
         weather_lat: form.weather_lat,
         weather_lon: form.weather_lon,
         weather_location: form.weather_location,
-        vacation_mode: form.vacation_mode,
+        vacation_start: form.vacation_start,
+        vacation_end: form.vacation_end,
         vacation_lat: form.vacation_lat,
         vacation_lon: form.vacation_lon,
         vacation_location: form.vacation_location,
@@ -81,7 +84,11 @@ export default function SettingsPage() {
     }
   };
 
-  const isVacation = form.vacation_mode === '1';
+  const todayStr = new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
+  const isVacationActive =
+    form.vacation_start && form.vacation_end
+      ? todayStr >= form.vacation_start && todayStr <= form.vacation_end
+      : false;
 
   return (
     <div>
@@ -162,73 +169,78 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Vacation mode */}
+        {/* Feriemodus */}
         <section className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800 text-lg">✈️ Feriemode</h2>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <div className="relative">
-                <input
-                  type="checkbox"
-                  className="sr-only"
-                  checked={isVacation}
-                  onChange={(e) =>
-                    setForm({ ...form, vacation_mode: e.target.checked ? '1' : '0' })
-                  }
-                />
-                <div
-                  className={`w-11 h-6 rounded-full transition-colors ${
-                    isVacation ? 'bg-cyan-500' : 'bg-gray-300'
-                  }`}
-                />
-                <div
-                  className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                    isVacation ? 'translate-x-5' : ''
-                  }`}
-                />
-              </div>
-              <span className="text-sm font-medium text-gray-700">
-                {isVacation ? 'Aktiv (ferie)' : 'Inaktiv'}
+            <h2 className="font-semibold text-gray-800 text-lg">✈️ Feriemodus</h2>
+            {form.vacation_start && form.vacation_end && (
+              <span
+                className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                  isVacationActive
+                    ? 'bg-cyan-100 text-cyan-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+              >
+                {isVacationActive ? '✈ Aktiv nå' : 'Ikke aktiv'}
               </span>
-            </label>
+            )}
           </div>
 
           <p className="text-sm text-gray-500">
-            Når feriemode er aktiv, vises vær for feriestedet i stedet for hjemstedet.
+            Sett feriperioden. Innenfor disse datoene vises vær for feriestedet i stedet for hjemstedet.
           </p>
 
-          {isVacation && (
-            <div className="grid grid-cols-3 gap-3 pt-2">
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Feriested</label>
-                <input
-                  type="text"
-                  value={form.vacation_location}
-                  onChange={(e) => setForm({ ...form, vacation_location: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                  placeholder="f.eks. Gran Canaria"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Breddegrad (lat)</label>
-                <input
-                  type="text"
-                  value={form.vacation_lat}
-                  onChange={(e) => setForm({ ...form, vacation_lat: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1">Lengdegrad (lon)</label>
-                <input
-                  type="text"
-                  value={form.vacation_lon}
-                  onChange={(e) => setForm({ ...form, vacation_lon: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
-                />
-              </div>
+          <div className="grid grid-cols-2 gap-3 max-w-sm">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Fra dato</label>
+              <input
+                type="date"
+                value={form.vacation_start}
+                onChange={(e) => setForm({ ...form, vacation_start: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              />
             </div>
-          )}
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Til dato</label>
+              <input
+                type="date"
+                value={form.vacation_end}
+                onChange={(e) => setForm({ ...form, vacation_end: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 pt-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Feriested</label>
+              <input
+                type="text"
+                value={form.vacation_location}
+                onChange={(e) => setForm({ ...form, vacation_location: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+                placeholder="f.eks. Gran Canaria"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Breddegrad (lat)</label>
+              <input
+                type="text"
+                value={form.vacation_lat}
+                onChange={(e) => setForm({ ...form, vacation_lat: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700 block mb-1">Lengdegrad (lon)</label>
+              <input
+                type="text"
+                value={form.vacation_lon}
+                onChange={(e) => setForm({ ...form, vacation_lon: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
         </section>
 
         {/* Password */}
