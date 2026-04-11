@@ -190,7 +190,10 @@ export default function CalendarDisplay({ initial }: Props) {
           <DayColumn
             key={day.date}
             day={day}
-            forecast={day.forecast}
+            forecast={
+              day.forecast ??
+              data.weather?.daily.find((f) => f.date === day.date)
+            }
             isToday={i === 0}
           />
         ))}

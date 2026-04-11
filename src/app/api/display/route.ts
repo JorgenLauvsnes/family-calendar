@@ -150,14 +150,18 @@ export async function GET() {
       });
 
       // Per-day forecast: pick vacation or home weather based on whether this
-      // specific date falls within the vacation period
+      // specific date falls within the vacation period.
+      // Use UTC date string for the forecast lookup because yr.ts generates
+      // daily entries keyed by UTC date (matches the yr.no timeseries format).
+      const utcDateStr = day.toISOString().split('T')[0];
+
       const isDayVacation =
         vacStart && vacEnd
           ? dateStr >= vacStart && dateStr <= vacEnd
           : vacationToday; // fallback: if no dates, mirror today's status
 
       const dayWeatherSource = isDayVacation ? (vacWeather ?? homeWeather) : homeWeather;
-      const forecast = dayWeatherSource?.daily.find((f) => f.date === dateStr);
+      const forecast = dayWeatherSource?.daily.find((f) => f.date === utcDateStr);
 
       days.push({ date: dateStr, events, forecast });
     }
